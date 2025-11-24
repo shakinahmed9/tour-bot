@@ -24,22 +24,21 @@ const client = new Client({
 // ========================================
 // CONFIG
 // ========================================
-const OWNER_ID = process.env.OWNER_ID;
 const REG_CHANNEL_ID = process.env.REG_CHANNEL_ID;
 const REVIEW_CHANNEL_ID = process.env.REVIEW_CHANNEL_ID;
+const REQUIRED_ROLE_ID = process.env.ADMIN_ROLE_ID;
 
 // ========================================
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
 });
 
-
 // ==========================
-// REGISTER SLASH COMMAND (INSTANT)
+// REGISTER SLASH COMMAND
 // ==========================
 client.on("ready", async () => {
   try {
-    const guild = client.guilds.cache.first(); // auto detect server
+    const guild = client.guilds.cache.first();
 
     if (!guild) return console.log("❌ No guild found.");
 
@@ -50,13 +49,11 @@ client.on("ready", async () => {
       }
     ]);
 
-    console.log("✅ Slash command registered instantly!");
+    console.log("✅ Slash command registered!");
   } catch (error) {
     console.error(error);
   }
 });
-
-
 
 // ========================================
 // COMMAND: /setpanel (ROLE ONLY)
@@ -64,9 +61,6 @@ client.on("ready", async () => {
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  const REQUIRED_ROLE_ID = process.env.ADMIN_ROLE_ID; // তোমার Role ID এখানে
-
-  // Role permission check
   if (!interaction.member.roles.cache.has(REQUIRED_ROLE_ID)) {
     return interaction.reply({
       content: "❌ এই কমান্ড ব্যবহার করার অনুমতি আপনার নেই!",
@@ -74,7 +68,6 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // Command action
   if (interaction.commandName === "setpanel") {
     const panelEmbed = new EmbedBuilder()
       .setTitle("📌 Free Fire Tournament Registration")
@@ -92,19 +85,18 @@ client.on("interactionCreate", async (interaction) => {
 
     if (!regChannel)
       return interaction.reply({
-        content: "Registration channel not found!",
+        content: "❌ Registration channel not found!",
         ephemeral: true,
       });
 
     await regChannel.send({ embeds: [panelEmbed], components: [row] });
 
     interaction.reply({
-      content: "Registration panel posted!",
+      content: "✅ Registration panel posted!",
       ephemeral: true,
     });
   }
 });
-
 
 // ========================================
 // BUTTON — OPEN FORM
@@ -117,51 +109,15 @@ client.on("interactionCreate", async (interaction) => {
       .setCustomId("reg_form")
       .setTitle("FF Tournament Registration");
 
-    const name = new TextInputBuilder()
-      .setCustomId("name")
-      .setLabel("Player Name 1 ")
+    const leaderName = new TextInputBuilder()
+      .setCustomId("leader_name")
+      .setLabel("Leader Name")
       .setRequired(true)
       .setStyle(TextInputStyle.Short);
 
-    const uid = new TextInputBuilder()
-      .setCustomId("uid")
-      .setLabel("Free Fire UID")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-    
-    const name = new TextInputBuilder()
-      .setCustomId("name")
-      .setLabel("Player Name 2 ")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-
-    const uid = new TextInputBuilder()
-      .setCustomId("uid")
-      .setLabel("Free Fire UID")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-    
-    const name = new TextInputBuilder()
-      .setCustomId("name")
-      .setLabel("Player Name 3 ")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-
-    const uid = new TextInputBuilder()
-      .setCustomId("uid")
-      .setLabel("Free Fire UID")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-    
-    const name = new TextInputBuilder()
-      .setCustomId("name")
-      .setLabel("Player Name 4 ")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-
-    const uid = new TextInputBuilder()
-      .setCustomId("uid")
-      .setLabel("Free Fire UID")
+    const leaderUid = new TextInputBuilder()
+      .setCustomId("leader_uid")
+      .setLabel("Leader Free Fire UID")
       .setRequired(true)
       .setStyle(TextInputStyle.Short);
 
@@ -172,8 +128,8 @@ client.on("interactionCreate", async (interaction) => {
       .setStyle(TextInputStyle.Short);
 
     modal.addComponents(
-      new ActionRowBuilder().addComponents(name),
-      new ActionRowBuilder().addComponents(uid),
+      new ActionRowBuilder().addComponents(leaderName),
+      new ActionRowBuilder().addComponents(leaderUid),
       new ActionRowBuilder().addComponents(phone)
     );
 
@@ -188,8 +144,8 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.isModalSubmit()) return;
 
   if (interaction.customId === "reg_form") {
-    const name = interaction.fields.getTextInputValue("name");
-    const uid = interaction.fields.getTextInputValue("uid");
+    const name = interaction.fields.getTextInputValue("leader_name");
+    const uid = interaction.fields.getTextInputValue("leader_uid");
     const phone = interaction.fields.getTextInputValue("phone");
 
     const reviewChannel = interaction.guild.channels.cache.get(REVIEW_CHANNEL_ID);
@@ -203,8 +159,8 @@ client.on("interactionCreate", async (interaction) => {
     const reviewEmbed = new EmbedBuilder()
       .setTitle("📝 New Registration")
       .addFields(
-        { name: "👤 Name", value: name },
-        { name: "🆔 UID", value: uid },
+        { name: "👤 Leader Name", value: name },
+        { name: "🆔 Leader UID", value: uid },
         { name: "📱 Phone", value: phone },
       )
       .setColor("Blue")
