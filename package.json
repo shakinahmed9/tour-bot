@@ -1,8 +1,8 @@
 {
   "name": "ff-tournament-bot",
   "version": "1.0.0",
-  "main": "bot.js",
   "type": "commonjs",
+  "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
