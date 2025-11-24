@@ -59,15 +59,22 @@ client.on("ready", async () => {
 
 
 // ========================================
-// COMMAND: /setpanel (OWNER ONLY)
+// COMMAND: /setpanel (ROLE ONLY)
 // ========================================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  if (interaction.user.id !== OWNER_ID) {
-    return interaction.reply({ content: "❌ You are not allowed to use this command.", ephemeral: true });
+  const REQUIRED_ROLE_ID = process.env.ADMIN_ROLE_ID; // তোমার Role ID এখানে
+
+  // Role permission check
+  if (!interaction.member.roles.cache.has(REQUIRED_ROLE_ID)) {
+    return interaction.reply({
+      content: "❌ এই কমান্ড ব্যবহার করার অনুমতি আপনার নেই!",
+      ephemeral: true,
+    });
   }
 
+  // Command action
   if (interaction.commandName === "setpanel") {
     const panelEmbed = new EmbedBuilder()
       .setTitle("📌 Free Fire Tournament Registration")
@@ -84,13 +91,20 @@ client.on("interactionCreate", async (interaction) => {
     const regChannel = interaction.guild.channels.cache.get(REG_CHANNEL_ID);
 
     if (!regChannel)
-      return interaction.reply({ content: "Registration channel not found!", ephemeral: true });
+      return interaction.reply({
+        content: "Registration channel not found!",
+        ephemeral: true,
+      });
 
     await regChannel.send({ embeds: [panelEmbed], components: [row] });
 
-    interaction.reply({ content: "Registration panel posted!", ephemeral: true });
+    interaction.reply({
+      content: "Registration panel posted!",
+      ephemeral: true,
+    });
   }
 });
+
 
 // ========================================
 // BUTTON — OPEN FORM
