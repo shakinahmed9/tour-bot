@@ -35,19 +35,27 @@ client.once("ready", () => {
 
 
 // ==========================
-// REGISTER SLASH COMMAND
+// REGISTER SLASH COMMAND (INSTANT)
 // ==========================
 client.on("ready", async () => {
-  const commands = [
-    {
-      name: "setpanel",
-      description: "Setup tournament registration panel"
-    }
-  ];
+  try {
+    const guild = client.guilds.cache.first(); // auto detect server
 
-  await client.application.commands.set(commands);
-  console.log("Slash commands registered!");
+    if (!guild) return console.log("❌ No guild found.");
+
+    await guild.commands.set([
+      {
+        name: "setpanel",
+        description: "Setup tournament registration panel"
+      }
+    ]);
+
+    console.log("✅ Slash command registered instantly!");
+  } catch (error) {
+    console.error(error);
+  }
 });
+
 
 
 // ========================================
