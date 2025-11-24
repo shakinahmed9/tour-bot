@@ -84,7 +84,7 @@ client.on("interactionCreate", async (interaction) => {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("open_form")
-        .setLabel("📋 Register Now")
+        .setLabel("📋 Register Here")
         .setStyle(ButtonStyle.Primary)
     );
 
@@ -119,7 +119,43 @@ client.on("interactionCreate", async (interaction) => {
 
     const name = new TextInputBuilder()
       .setCustomId("name")
-      .setLabel("Player Name")
+      .setLabel("Player Name 1 ")
+      .setRequired(true)
+      .setStyle(TextInputStyle.Short);
+
+    const uid = new TextInputBuilder()
+      .setCustomId("uid")
+      .setLabel("Free Fire UID")
+      .setRequired(true)
+      .setStyle(TextInputStyle.Short);
+    
+    const name = new TextInputBuilder()
+      .setCustomId("name")
+      .setLabel("Player Name 2 ")
+      .setRequired(true)
+      .setStyle(TextInputStyle.Short);
+
+    const uid = new TextInputBuilder()
+      .setCustomId("uid")
+      .setLabel("Free Fire UID")
+      .setRequired(true)
+      .setStyle(TextInputStyle.Short);
+    
+    const name = new TextInputBuilder()
+      .setCustomId("name")
+      .setLabel("Player Name 3 ")
+      .setRequired(true)
+      .setStyle(TextInputStyle.Short);
+
+    const uid = new TextInputBuilder()
+      .setCustomId("uid")
+      .setLabel("Free Fire UID")
+      .setRequired(true)
+      .setStyle(TextInputStyle.Short);
+    
+    const name = new TextInputBuilder()
+      .setCustomId("name")
+      .setLabel("Player Name 4 ")
       .setRequired(true)
       .setStyle(TextInputStyle.Short);
 
