@@ -18,9 +18,8 @@ const client = new Client({
 });
 
 // ENV CONFIG
-const REG_CHANNEL = process.env.REG_CHANNEL;            // User রেজিস্ট্রেশন চ্যানেল
-const APPROVE_CHANNEL = process.env.APPROVE_CHANNEL;    // Staff approval চ্যানেল
-const REQUIRED_ROLE = process.env.REQUIRED_ROLE;        // Register role
+const REG_CHANNEL = process.env.REG_CHANNEL;            // User registration channel
+const APPROVE_CHANNEL = process.env.APPROVE_CHANNEL;    // Staff approval channel
 const APPROVER_ROLE = process.env.APPROVER_ROLE;        // Staff approve role
 
 let registered = new Set(); // একবার রেজিস্টার সেভ থাকবে
@@ -35,11 +34,6 @@ client.on("messageCreate", async (msg) => {
 
   // User must send in REG_CHANNEL
   if (msg.channel.id !== REG_CHANNEL) return;
-
-  // Required role check
-  if (!msg.member.roles.cache.has(REQUIRED_ROLE)) {
-    return msg.reply("❌ You don't have permission to register.");
-  }
 
   // Already registered?
   if (registered.has(msg.author.id)) {
@@ -80,7 +74,6 @@ client.on("messageCreate", async (msg) => {
   msg.reply("✅ Your registration has been submitted for review!");
   registered.add(msg.author.id);
 });
-
 
 // ==============================================
 // APPROVE / REJECT SYSTEM
