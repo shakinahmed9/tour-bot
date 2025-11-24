@@ -33,6 +33,23 @@ client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
 });
 
+
+// ==========================
+// REGISTER SLASH COMMAND
+// ==========================
+client.on("ready", async () => {
+  const commands = [
+    {
+      name: "setpanel",
+      description: "Setup tournament registration panel"
+    }
+  ];
+
+  await client.application.commands.set(commands);
+  console.log("Slash commands registered!");
+});
+
+
 // ========================================
 // COMMAND: /setpanel (OWNER ONLY)
 // ========================================
