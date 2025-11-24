@@ -4,11 +4,12 @@ const {
   GatewayIntentBits,
   Partials,
   EmbedBuilder,
-  PermissionsBitField,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ChannelType,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } = require("discord.js");
 
 const client = new Client({
@@ -20,23 +21,21 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
-// ===============================
-// CONFIG VARIABLES
-// ===============================
-const OWNER_ID = process.env.OWNER_ID;              // Only bot owner can run commands
-const REG_CHANNEL_ID = process.env.REG_CHANNEL_ID;  // Registration form channel
-const REVIEW_CHANNEL_ID = process.env.REVIEW_CHANNEL_ID; // Staff review channel
+// ========================================
+// CONFIG
+// ========================================
+const OWNER_ID = process.env.OWNER_ID;
+const REG_CHANNEL_ID = process.env.REG_CHANNEL_ID;
+const REVIEW_CHANNEL_ID = process.env.REVIEW_CHANNEL_ID;
 
-// ===============================
-// READY EVENT
-// ===============================
+// ========================================
 client.once("ready", () => {
-  console.log(`Bot Logged in as ${client.user.tag}`);
+  console.log(`Logged in as ${client.user.tag}`);
 });
 
-// ===============================
-// OWNER-ONLY COMMANDS
-// ===============================
+// ========================================
+// COMMAND: /setpanel (OWNER ONLY)
+// ========================================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -47,9 +46,8 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.commandName === "setpanel") {
     const panelEmbed = new EmbedBuilder()
       .setTitle("📌 Free Fire Tournament Registration")
-      .setDescription("নিচের বাটনে ক্লিক করে রেজিস্ট্রেশন ফরম পূরণ করুন।")
-      .setColor("Yellow")
-      .setThumbnail(interaction.guild.iconURL());
+      .setDescription("নিচের বাটনে ক্লিক করে রেজিস্ট্রেশন করুন।")
+      .setColor("Yellow");
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -69,69 +67,48 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-// ===============================
-// BUTTON: OPEN FORM
-// ===============================
+// ========================================
+// BUTTON — OPEN FORM
+// ========================================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
 
   if (interaction.customId === "open_form") {
-    const modal = {
-      title: "FF Tournament Registration",
-      custom_id: "reg_form",
-      components: [
-        {
-          type: 1,
-          components: [
-            {
-              type: 4,
-              custom_id: "name",
-              label: "Player Name",
-              style: 1,
-              min_length: 2,
-              max_length: 50,
-              required: true,
-            },
-          ],
-        },
-        {
-          type: 1,
-          components: [
-            {
-              type: 4,
-              custom_id: "uid",
-              label: "Free Fire UID",
-              style: 1,
-              min_length: 5,
-              max_length: 20,
-              required: true,
-            },
-          ],
-        },
-        {
-          type: 1,
-          components: [
-            {
-              type: 4,
-              custom_id: "phone",
-              label: "Phone Number",
-              style: 1,
-              min_length: 10,
-              max_length: 15,
-              required: true,
-            },
-          ],
-        },
-      ],
-    };
+    const modal = new ModalBuilder()
+      .setCustomId("reg_form")
+      .setTitle("FF Tournament Registration");
 
-    interaction.showModal(modal);
+    const name = new TextInputBuilder()
+      .setCustomId("name")
+      .setLabel("Player Name")
+      .setRequired(true)
+      .setStyle(TextInputStyle.Short);
+
+    const uid = new TextInputBuilder()
+      .setCustomId("uid")
+      .setLabel("Free Fire UID")
+      .setRequired(true)
+      .setStyle(TextInputStyle.Short);
+
+    const phone = new TextInputBuilder()
+      .setCustomId("phone")
+      .setLabel("Phone Number")
+      .setRequired(true)
+      .setStyle(TextInputStyle.Short);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(name),
+      new ActionRowBuilder().addComponents(uid),
+      new ActionRowBuilder().addComponents(phone)
+    );
+
+    return interaction.showModal(modal);
   }
 });
 
-// ===============================
+// ========================================
 // FORM SUBMIT
-// ===============================
+// ========================================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isModalSubmit()) return;
 
@@ -149,50 +126,50 @@ client.on("interactionCreate", async (interaction) => {
       });
 
     const reviewEmbed = new EmbedBuilder()
-      .setTitle("📝 New Tournament Registration")
+      .setTitle("📝 New Registration")
       .addFields(
         { name: "👤 Name", value: name },
         { name: "🆔 UID", value: uid },
         { name: "📱 Phone", value: phone },
-        { name: "🕒 Time", value: `<t:${Math.floor(Date.now() / 1000)}:F>` }
       )
-      .setColor("Blue");
+      .setColor("Blue")
+      .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`accept_${interaction.user.id}`).setLabel("Accept").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`reject_${interaction.user.id}`).setLabel("Reject").setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel("Accept").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel("Reject").setStyle(ButtonStyle.Danger)
     );
 
     await reviewChannel.send({ embeds: [reviewEmbed], components: [row] });
 
     interaction.reply({
-      content: "✅ Your registration has been submitted!",
+      content: "✅ Your registration is submitted!",
       ephemeral: true,
     });
   }
 });
 
-// ===============================
-// ACCEPT / REJECT SYSTEM
-// ===============================
+// ========================================
+// ACCEPT / REJECT
+// ========================================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
 
   const [action, userId] = interaction.customId.split("_");
 
-  if (!["accept", "reject"].includes(action)) return;
+  if (!["approve", "deny"].includes(action)) return;
 
   const targetUser = await interaction.guild.members.fetch(userId).catch(() => null);
 
   if (!targetUser)
-    return interaction.reply({ content: "User no longer exists.", ephemeral: true });
+    return interaction.reply({ content: "User not found.", ephemeral: true });
 
-  if (action === "accept") {
+  if (action === "approve") {
     targetUser.send("🎉 Your registration has been **ACCEPTED**!").catch(() => {});
-    interaction.reply({ content: "User accepted!", ephemeral: true });
+    return interaction.reply({ content: "User accepted!", ephemeral: true });
   } else {
     targetUser.send("❌ Your registration has been **REJECTED**.").catch(() => {});
-    interaction.reply({ content: "User rejected!", ephemeral: true });
+    return interaction.reply({ content: "User rejected!", ephemeral: true });
   }
 });
 
