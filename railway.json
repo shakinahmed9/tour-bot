@@ -1,0 +1,15 @@
+{
+  "build": {
+    "builder": "NIXPACKS",
+    "nixpacksPlan": {
+      "phases": {
+        "setup": {
+          "commands": [
+            "apt-get update",
+            "apt-get install -y libatomic1"
+          ]
+        }
+      }
+    }
+  }
+}
