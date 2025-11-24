@@ -28,21 +28,15 @@ let registered = new Set(); // একবার রেজিস্টার স�
 // USER REGISTRATION (ONLY REG_CHANNEL)
 // ==============================================
 client.on("messageCreate", async (msg) => {
+  if (msg.author.bot) return;           // Bot ignore
+  if (msg.channel.id !== REG_CHANNEL) return; // Only registration channel
 
-  // DM blocked
-  if (msg.channel.type === 1) return;
-
-  // User must send in REG_CHANNEL
-  if (msg.channel.id !== REG_CHANNEL) return;
-
-  // Already registered?
   if (registered.has(msg.author.id)) {
     return msg.reply("❌ You are already registered.");
   }
 
-  // Registration embed
   const embed = new EmbedBuilder()
-    .setTitle("New Registration Request")
+    .setTitle("📝 New Registration Request")
     .addFields(
       { name: "User", value: `<@${msg.author.id}>` },
       { name: "Message", value: msg.content }
@@ -61,12 +55,11 @@ client.on("messageCreate", async (msg) => {
       .setStyle(ButtonStyle.Danger)
   );
 
-  // Send to approval channel
   const approveChannel = msg.guild.channels.cache.get(APPROVE_CHANNEL);
   if (!approveChannel)
     return msg.reply("⚠ Approve channel not found in config!");
 
-  approveChannel.send({
+  await approveChannel.send({
     embeds: [embed],
     components: [row],
   });
@@ -76,68 +69,48 @@ client.on("messageCreate", async (msg) => {
 });
 
 // ==============================================
-// APPROVE / REJECT SYSTEM
+// APPROVE / REJECT SYSTEM (APPROVE_CHANNEL)
 // ==============================================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
 
-  // Approve must only happen in APPROVE_CHANNEL
   if (interaction.channel.id !== APPROVE_CHANNEL) {
     return interaction.reply({
       content: "❌ You cannot approve/reject here.",
-      ephemeral: true,
+      ephemeral: true
     });
   }
 
-  // Must have staff role
   if (!interaction.member.roles.cache.has(APPROVER_ROLE)) {
     return interaction.reply({
       content: "❌ You don't have permission for this.",
-      ephemeral: true,
+      ephemeral: true
     });
   }
 
   const [type, userid] = interaction.customId.split("_");
-
   const user = await interaction.guild.members.fetch(userid).catch(() => null);
-  if (!user)
-    return interaction.reply("User no longer exists.");
+  if (!user) return interaction.reply("User no longer exists.");
 
   // ========== APPROVE ==========
   if (type === "approve") {
     interaction.reply(`✅ Approved by <@${interaction.user.id}>`);
-
-    user.send("🎉 **Congratulations! Your registration has been APPROVED!**")
-      .catch(() => {});
+    user.send("🎉 **Congratulations! Your registration has been APPROVED!**").catch(() => {});
   }
 
   // ========== REJECT ==========
   if (type === "reject") {
-    interaction.reply({
-      content: "❌ Please type reject reason:",
-      ephemeral: true
-    });
+    interaction.reply({ content: "❌ Please type reject reason:", ephemeral: true });
 
-    const filter = (m) => m.author.id === interaction.user.id;
-
-    const collected = await interaction.channel.awaitMessages({
-      filter,
-      max: 1,
-      time: 30000
-    });
-
+    const filter = m => m.author.id === interaction.user.id;
+    const collected = await interaction.channel.awaitMessages({ filter, max: 1, time: 30000 });
     const reason = collected.first()?.content || "No reason provided";
 
-    // Clean message
     if (collected.first()) collected.first().delete().catch(() => {});
 
-    user.send(`❌ Your registration was **REJECTED**.\n**Reason:** ${reason}`)
-      .catch(() => {});
+    user.send(`❌ Your registration was **REJECTED**.\n**Reason:** ${reason}`).catch(() => {});
 
-    interaction.followUp({
-      content: `❌ Rejected.\nReason: **${reason}**`,
-      ephemeral: true,
-    });
+    interaction.followUp({ content: `❌ Rejected.\nReason: **${reason}**`, ephemeral: true });
   }
 });
 
