@@ -2,14 +2,10 @@ require("dotenv").config();
 const {
   Client,
   GatewayIntentBits,
-  Partials,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle
 } = require("discord.js");
 
 const client = new Client({
@@ -17,190 +13,138 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-  ],
-  partials: [Partials.Channel],
+    GatewayIntentBits.DirectMessages
+  ]
 });
 
-// ========================================
-// CONFIG
-// ========================================
-const REG_CHANNEL_ID = process.env.REG_CHANNEL_ID;
-const REVIEW_CHANNEL_ID = process.env.REVIEW_CHANNEL_ID;
-const REQUIRED_ROLE_ID = process.env.ADMIN_ROLE_ID;
+// ENV CONFIG
+const REG_CHANNEL = process.env.REG_CHANNEL;            // User রেজিস্ট্রেশন চ্যানেল
+const APPROVE_CHANNEL = process.env.APPROVE_CHANNEL;    // Staff approval চ্যানেল
+const REQUIRED_ROLE = process.env.REQUIRED_ROLE;        // Register role
+const APPROVER_ROLE = process.env.APPROVER_ROLE;        // Staff approve role
 
-// ========================================
-client.once("ready", () => {
-  console.log(`Logged in as ${client.user.tag}`);
-});
+let registered = new Set(); // একবার রেজিস্টার সেভ থাকবে
 
-// ==========================
-// REGISTER SLASH COMMAND
-// ==========================
-client.on("ready", async () => {
-  try {
-    const guild = client.guilds.cache.first();
+// ==============================================
+// USER REGISTRATION (ONLY REG_CHANNEL)
+// ==============================================
+client.on("messageCreate", async (msg) => {
 
-    if (!guild) return console.log("❌ No guild found.");
+  // DM blocked
+  if (msg.channel.type === 1) return;
 
-    await guild.commands.set([
-      {
-        name: "setpanel",
-        description: "Setup tournament registration panel"
-      }
-    ]);
+  // User must send in REG_CHANNEL
+  if (msg.channel.id !== REG_CHANNEL) return;
 
-    console.log("✅ Slash command registered!");
-  } catch (error) {
-    console.error(error);
+  // Required role check
+  if (!msg.member.roles.cache.has(REQUIRED_ROLE)) {
+    return msg.reply("❌ You don't have permission to register.");
   }
+
+  // Already registered?
+  if (registered.has(msg.author.id)) {
+    return msg.reply("❌ You are already registered.");
+  }
+
+  // Registration embed
+  const embed = new EmbedBuilder()
+    .setTitle("New Registration Request")
+    .addFields(
+      { name: "User", value: `<@${msg.author.id}>` },
+      { name: "Message", value: msg.content }
+    )
+    .setColor("Blue")
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`approve_${msg.author.id}`)
+      .setLabel("Approve")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`reject_${msg.author.id}`)
+      .setLabel("Reject")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  // Send to approval channel
+  const approveChannel = msg.guild.channels.cache.get(APPROVE_CHANNEL);
+  if (!approveChannel)
+    return msg.reply("⚠ Approve channel not found in config!");
+
+  approveChannel.send({
+    embeds: [embed],
+    components: [row],
+  });
+
+  msg.reply("✅ Your registration has been submitted for review!");
+  registered.add(msg.author.id);
 });
 
-// ========================================
-// COMMAND: /setpanel (ROLE ONLY)
-// ========================================
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
 
-  if (!interaction.member.roles.cache.has(REQUIRED_ROLE_ID)) {
+// ==============================================
+// APPROVE / REJECT SYSTEM
+// ==============================================
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+
+  // Approve must only happen in APPROVE_CHANNEL
+  if (interaction.channel.id !== APPROVE_CHANNEL) {
     return interaction.reply({
-      content: "❌ এই কমান্ড ব্যবহার করার অনুমতি আপনার নেই!",
+      content: "❌ You cannot approve/reject here.",
       ephemeral: true,
     });
   }
 
-  if (interaction.commandName === "setpanel") {
-    const panelEmbed = new EmbedBuilder()
-      .setTitle("📌 Free Fire Tournament Registration")
-      .setDescription("নিচের বাটনে ক্লিক করে রেজিস্ট্রেশন করুন।")
-      .setColor("Yellow");
+  // Must have staff role
+  if (!interaction.member.roles.cache.has(APPROVER_ROLE)) {
+    return interaction.reply({
+      content: "❌ You don't have permission for this.",
+      ephemeral: true,
+    });
+  }
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("open_form")
-        .setLabel("📋 Register Here")
-        .setStyle(ButtonStyle.Primary)
-    );
+  const [type, userid] = interaction.customId.split("_");
 
-    const regChannel = interaction.guild.channels.cache.get(REG_CHANNEL_ID);
+  const user = await interaction.guild.members.fetch(userid).catch(() => null);
+  if (!user)
+    return interaction.reply("User no longer exists.");
 
-    if (!regChannel)
-      return interaction.reply({
-        content: "❌ Registration channel not found!",
-        ephemeral: true,
-      });
+  // ========== APPROVE ==========
+  if (type === "approve") {
+    interaction.reply(`✅ Approved by <@${interaction.user.id}>`);
 
-    await regChannel.send({ embeds: [panelEmbed], components: [row] });
+    user.send("🎉 **Congratulations! Your registration has been APPROVED!**")
+      .catch(() => {});
+  }
 
+  // ========== REJECT ==========
+  if (type === "reject") {
     interaction.reply({
-      content: "✅ Registration panel posted!",
+      content: "❌ Please type reject reason:",
+      ephemeral: true
+    });
+
+    const filter = (m) => m.author.id === interaction.user.id;
+
+    const collected = await interaction.channel.awaitMessages({
+      filter,
+      max: 1,
+      time: 30000
+    });
+
+    const reason = collected.first()?.content || "No reason provided";
+
+    // Clean message
+    if (collected.first()) collected.first().delete().catch(() => {});
+
+    user.send(`❌ Your registration was **REJECTED**.\n**Reason:** ${reason}`)
+      .catch(() => {});
+
+    interaction.followUp({
+      content: `❌ Rejected.\nReason: **${reason}**`,
       ephemeral: true,
     });
-  }
-});
-
-// ========================================
-// BUTTON — OPEN FORM
-// ========================================
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  if (interaction.customId === "open_form") {
-    const modal = new ModalBuilder()
-      .setCustomId("reg_form")
-      .setTitle("FF Tournament Registration");
-
-    const leaderName = new TextInputBuilder()
-      .setCustomId("leader_name")
-      .setLabel("Leader Name")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-
-    const leaderUid = new TextInputBuilder()
-      .setCustomId("leader_uid")
-      .setLabel("Leader Free Fire UID")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-
-    const phone = new TextInputBuilder()
-      .setCustomId("phone")
-      .setLabel("Phone Number")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(leaderName),
-      new ActionRowBuilder().addComponents(leaderUid),
-      new ActionRowBuilder().addComponents(phone)
-    );
-
-    return interaction.showModal(modal);
-  }
-});
-
-// ========================================
-// FORM SUBMIT
-// ========================================
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isModalSubmit()) return;
-
-  if (interaction.customId === "reg_form") {
-    const name = interaction.fields.getTextInputValue("leader_name");
-    const uid = interaction.fields.getTextInputValue("leader_uid");
-    const phone = interaction.fields.getTextInputValue("phone");
-
-    const reviewChannel = interaction.guild.channels.cache.get(REVIEW_CHANNEL_ID);
-
-    if (!reviewChannel)
-      return interaction.reply({
-        content: "Review channel missing!",
-        ephemeral: true,
-      });
-
-    const reviewEmbed = new EmbedBuilder()
-      .setTitle("📝 New Registration")
-      .addFields(
-        { name: "👤 Leader Name", value: name },
-        { name: "🆔 Leader UID", value: uid },
-        { name: "📱 Phone", value: phone },
-      )
-      .setColor("Blue")
-      .setTimestamp();
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`approve_${interaction.user.id}`).setLabel("Accept").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`deny_${interaction.user.id}`).setLabel("Reject").setStyle(ButtonStyle.Danger)
-    );
-
-    await reviewChannel.send({ embeds: [reviewEmbed], components: [row] });
-
-    interaction.reply({
-      content: "✅ Your registration is submitted!",
-      ephemeral: true,
-    });
-  }
-});
-
-// ========================================
-// ACCEPT / REJECT
-// ========================================
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  const [action, userId] = interaction.customId.split("_");
-
-  if (!["approve", "deny"].includes(action)) return;
-
-  const targetUser = await interaction.guild.members.fetch(userId).catch(() => null);
-
-  if (!targetUser)
-    return interaction.reply({ content: "User not found.", ephemeral: true });
-
-  if (action === "approve") {
-    targetUser.send("🎉 Your registration has been **ACCEPTED**!").catch(() => {});
-    return interaction.reply({ content: "User accepted!", ephemeral: true });
-  } else {
-    targetUser.send("❌ Your registration has been **REJECTED**.").catch(() => {});
-    return interaction.reply({ content: "User rejected!", ephemeral: true });
   }
 });
 
