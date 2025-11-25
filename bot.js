@@ -2,19 +2,20 @@ require("dotenv").config();
 const {
   Client,
   GatewayIntentBits,
-  Partials,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   ModalBuilder,
   TextInputBuilder,
-  TextInputStyle
+  TextInputStyle,
+  Partials,
 } = require("discord.js");
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages
@@ -22,262 +23,231 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
-// ENV
-const APPROVER_ROLE = process.env.APPROVER_ROLE;
-const REG_CHANNEL = process.env.REG_CHANNEL;
+// ========================= ENV CONFIG =========================
+const REG_CHANNEL = process.env.REG_CHANNEL; 
 const APPROVE_CHANNEL = process.env.APPROVE_CHANNEL;
-const REQUIRED_ROLE = process.env.REQUIRED_ROLE || "none";
+const APPROVER_ROLE = process.env.APPROVER_ROLE;
+const REQUIRE_ROLE = process.env.REQUIRE_ROLE; // <<=== REQUIRED ROLE HERE
 
+let tempData = {};
 let registered = new Set();
 
-client.once("ready", () => {
-  console.log(`Logged in as ${client.user.tag}`);
-});
+// =============================================================
+// SEND REGISTRATION BUTTON WHEN USER WRITES IN REG CHANNEL
+// =============================================================
+client.on("messageCreate", async (msg) => {
+  if (msg.author.bot) return;
+  if (msg.channel.id !== REG_CHANNEL) return;
 
-// Slash command register
-client.on("ready", async () => {
-  const guild = client.guilds.cache.first();
-  if (!guild) return;
-
-  await guild.commands.set([
-    {
-      name: "setpanel",
-      description: "Setup tournament registration panel"
-    }
-  ]);
-
-  console.log("Slash command registered.");
-});
-
-// /setpanel
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-
-  if (interaction.user.id !== APPROVER_ROLE) {
-    return interaction.reply({
-      content: "❌ You are not allowed to use this command.",
-      ephemeral: true
-    });
+  // Required Role Check
+  if (REQUIRE_ROLE && !msg.member.roles.cache.has(REQUIRE_ROLE)) {
+    return msg.reply("❌ You don't have the required role to register.");
   }
 
-  if (interaction.commandName === "setpanel") {
-    const embed = new EmbedBuilder()
-      .setTitle("📌 Free Fire Tournament Registration")
-      .setDescription("রেজিস্ট্রেশন করতে নিচের বাটনে ক্লিক করুন।")
-      .setColor("Yellow");
-
-    const btn = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("open_form")
-        .setLabel("📋 Register Here")
-        .setStyle(ButtonStyle.Primary)
-    );
-
-    const ch = interaction.guild.channels.cache.get(REG_CHANNEL);
-    if (!ch) return interaction.reply({ content: "Registration channel missing!", ephemeral: true });
-
-    await ch.send({ embeds: [embed], components: [btn] });
-    interaction.reply({ content: "Panel created.", ephemeral: true });
+  if (registered.has(msg.author.id)) {
+    return msg.reply("❌ You already registered.");
   }
+
+  const embed = new EmbedBuilder()
+    .setTitle("📝 Tournament Registration")
+    .setDescription("Click **Register Now** to start registration in DM.")
+    .setColor("Blue");
+
+  const btn = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`start_${msg.author.id}`)
+      .setLabel("Register Now")
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  msg.reply({ embeds: [embed], components: [btn] });
 });
 
-// OPEN FORM
+// =============================================================
+// OPEN STEP 1 — TEAM + LEADER FORM IN DM
+// =============================================================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
 
-  if (interaction.customId === "open_form") {
+  const [type, userid] = interaction.customId.split("_");
+  if (type !== "start") return;
 
-    if (REQUIRED_ROLE !== "none") {
-      if (!interaction.member.roles.cache.has(REQUIRED_ROLE)) {
-        return interaction.reply({
-          content: "❌ You do not have the required role to register.",
-          ephemeral: true
-        });
-      }
-    }
+  if (interaction.user.id !== userid)
+    return interaction.reply({ content: "❌ This button is not for you.", ephemeral: true });
 
-    if (registered.has(interaction.user.id)) {
-      return interaction.reply({
-        content: "❌ You already registered!",
-        ephemeral: true
-      });
-    }
+  try {
+    await interaction.reply({ content: "📩 Check your DM!", ephemeral: true });
 
     const modal = new ModalBuilder()
-      .setCustomId("reg_form_full")
-      .setTitle("FULL TEAM REGISTRATION");
-
-    // ======== Leader ========
-    const leaderName = new TextInputBuilder()
-      .setCustomId("leaderName")
-      .setLabel("Leader Game Name")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-
-    const leaderUID = new TextInputBuilder()
-      .setCustomId("leaderUID")
-      .setLabel("Leader UID")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-
-    const discordID = new TextInputBuilder()
-      .setCustomId("discordID")
-      .setLabel("Leader Discord User ID")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-
-    const phone = new TextInputBuilder()
-      .setCustomId("phone")
-      .setLabel("Phone Number")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-
-    // ======== Player 2 ========
-    const p2 = new TextInputBuilder()
-      .setCustomId("p2")
-      .setLabel("Player 2 Name - UID")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-
-    // ======== Player 3 ========
-    const p3 = new TextInputBuilder()
-      .setCustomId("p3")
-      .setLabel("Player 3 Name - UID")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-
-    // ======== Player 4 ========
-    const p4 = new TextInputBuilder()
-      .setCustomId("p4")
-      .setLabel("Player 4 Name - UID")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
-
-    // ======== Player 5 ========
-    const p5 = new TextInputBuilder()
-      .setCustomId("p5")
-      .setLabel("Player 5 Name - UID")
-      .setRequired(true)
-      .setStyle(TextInputStyle.Short);
+      .setCustomId(`step1_${userid}`)
+      .setTitle("Team Registration — Step 1");
 
     modal.addComponents(
-      new ActionRowBuilder().addComponents(leaderName),
-      new ActionRowBuilder().addComponents(leaderUID),
-      new ActionRowBuilder().addComponents(discordID),
-      new ActionRowBuilder().addComponents(phone),
-      new ActionRowBuilder().addComponents(p2),
-      new ActionRowBuilder().addComponents(p3),
-      new ActionRowBuilder().addComponents(p4),
-      new ActionRowBuilder().addComponents(p5)
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("teamName")
+          .setLabel("Team Name")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("leaderName")
+          .setLabel("Leader Name")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("leaderUID")
+          .setLabel("Leader UID")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("discordName")
+          .setLabel("Discord Username")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      )
     );
 
-    return interaction.showModal(modal);
+    await interaction.user.send("📝 **Fill Step 1 Form**");
+    await interaction.user.showModal(modal);
+
+  } catch (err) {
+    return interaction.reply({
+      content: "❌ I cannot DM you. Turn on your DM.",
+      ephemeral: true
+    });
   }
 });
 
-// FORM SUBMIT (ALL PLAYERS)
+// =============================================================
+// STEP 1 SUBMISSION → OPEN STEP 2
+// =============================================================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isModalSubmit()) return;
 
-  if (interaction.customId === "reg_form_full") {
-    registered.add(interaction.user.id);
+  const [form, userid] = interaction.customId.split("_");
 
-    const leaderName = interaction.fields.getTextInputValue("leaderName");
-    const leaderUID = interaction.fields.getTextInputValue("leaderUID");
-    const discordID = interaction.fields.getTextInputValue("discordID");
-    const phone = interaction.fields.getTextInputValue("phone");
+  if (form !== "step1") return;
+  if (interaction.user.id !== userid)
+    return interaction.reply({ content: "❌ Not your form.", ephemeral: true });
 
-    const p2 = interaction.fields.getTextInputValue("p2");
-    const p3 = interaction.fields.getTextInputValue("p3");
-    const p4 = interaction.fields.getTextInputValue("p4");
-    const p5 = interaction.fields.getTextInputValue("p5");
+  tempData[userid] = {
+    teamName: interaction.fields.getTextInputValue("teamName"),
+    leaderName: interaction.fields.getTextInputValue("leaderName"),
+    leaderUID: interaction.fields.getTextInputValue("leaderUID"),
+    discordName: interaction.fields.getTextInputValue("discordName")
+  };
 
-    // ASK FOR SCREENSHOTS
-    await interaction.reply({
-      content: "📸 Please upload **5 screenshots in one message**.",
-      ephemeral: true
-    });
+  // Step 2 modal
+  const modal2 = new ModalBuilder()
+    .setCustomId(`step2_${userid}`)
+    .setTitle("Player Registration — Step 2");
 
-    const filter = (m) => m.author.id === interaction.user.id && m.attachments.size >= 1;
+  modal2.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId("p1").setLabel("Player 1 (Name + UID)").setStyle(1).setRequired(true)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId("p2").setLabel("Player 2 (Name + UID)").setStyle(1).setRequired(true)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId("p3").setLabel("Player 3 (Name + UID)").setStyle(1).setRequired(true)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId("p4").setLabel("Player 4 (Name + UID)").setStyle(1).setRequired(true)
+    )
+  );
 
-    const ssMsg = await interaction.channel.awaitMessages({
-      filter,
-      max: 1,
-      time: 120000
-    });
+  await interaction.reply({ content: "Step 1 complete! Opening next form…" });
+  await interaction.user.showModal(modal2);
+});
 
-    const msg = ssMsg.first();
-    if (!msg) {
-      return interaction.followUp({
-        content: "❌ Time expired! Please start again.",
-        ephemeral: true
-      });
-    }
+// =============================================================
+// STEP 2 → FINAL SUBMIT
+// =============================================================
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isModalSubmit()) return;
 
-    const ss = msg.attachments.map((a) => a.url);
+  const [form, userid] = interaction.customId.split("_");
+  if (form !== "step2") return;
 
-    const approveCh = interaction.guild.channels.cache.get(APPROVE_CHANNEL);
+  let data = tempData[userid];
+  if (!data) return interaction.reply("❌ Something went wrong.");
 
-    const embed = new EmbedBuilder()
-      .setTitle("📝 New Team Registration")
-      .addFields(
-        { name: "Leader Name", value: leaderName },
-        { name: "Leader UID", value: leaderUID },
-        { name: "Discord ID", value: discordID },
-        { name: "Phone", value: phone },
-        { name: "Player 2", value: p2 },
-        { name: "Player 3", value: p3 },
-        { name: "Player 4", value: p4 },
-        { name: "Player 5", value: p5 }
-      )
-      .setColor("Blue")
-      .setTimestamp();
+  // Save step 2 data
+  data.p1 = interaction.fields.getTextInputValue("p1");
+  data.p2 = interaction.fields.getTextInputValue("p2");
+  data.p3 = interaction.fields.getTextInputValue("p3");
+  data.p4 = interaction.fields.getTextInputValue("p4");
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`approve_${interaction.user.id}`)
-        .setLabel("Approve")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`deny_${interaction.user.id}`)
-        .setLabel("Reject")
-        .setStyle(ButtonStyle.Danger)
+  delete tempData[userid];
+
+  // Send to approve channel
+  const approveCh = await client.channels.fetch(APPROVE_CHANNEL);
+
+  const embed = new EmbedBuilder()
+    .setTitle("📝 New Registration Request")
+    .setColor("Blue")
+    .addFields(
+      { name: "User", value: `<@${userid}>` },
+      { name: "Team Name", value: data.teamName },
+      { name: "Leader", value: `${data.leaderName} — UID: ${data.leaderUID}` },
+      { name: "Discord Username", value: data.discordName },
+      { name: "Player 1", value: data.p1 },
+      { name: "Player 2", value: data.p2 },
+      { name: "Player 3", value: data.p3 },
+      { name: "Player 4", value: data.p4 }
     );
 
-    approveCh.send({
-      embeds: [embed],
-      components: [row],
-      files: ss
-    });
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`approve_${userid}`).setLabel("Approve").setStyle(3),
+    new ButtonBuilder().setCustomId(`reject_${userid}`).setLabel("Reject").setStyle(4)
+  );
 
-    interaction.followUp({
-      content: "🎉 Final submission complete!",
-      ephemeral: true
-    });
-  }
+  approveCh.send({ embeds: [embed], components: [row] });
+
+  interaction.reply("✅ Registration Submitted! Please wait for approval.");
+  registered.add(userid);
 });
 
-// APPROVE / DENY
+// =============================================================
+// APPROVE / REJECT
+// =============================================================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
+  if (interaction.channel.id !== APPROVE_CHANNEL) return;
 
-  const [action, userId] = interaction.customId.split("_");
-  if (!["approve", "deny"].includes(action)) return;
+  if (!interaction.member.roles.cache.has(APPROVER_ROLE))
+    return interaction.reply({ content: "❌ You cannot approve.", ephemeral: true });
 
-  const user = await interaction.guild.members.fetch(userId).catch(() => null);
-  if (!user) {
-    return interaction.reply({ content: "User not found.", ephemeral: true });
-  }
+  const [action, userid] = interaction.customId.split("_");
+  const user = await interaction.guild.members.fetch(userid).catch(() => null);
+
+  if (!user) return interaction.reply("❌ User not found.");
 
   if (action === "approve") {
-    user.send("🎉 Your registration is **APPROVED**!");
-    return interaction.reply({ content: "Approved!", ephemeral: true });
+    interaction.reply(`✅ Approved by <@${interaction.user.id}>`);
+    user.send("🎉 Your registration has been **approved!**");
   }
 
-  if (action === "deny") {
-    user.send("❌ Your registration is **REJECTED**.");
-    return interaction.reply({ content: "Rejected!", ephemeral: true });
+  if (action === "reject") {
+    interaction.reply({ content: "❌ Type reject reason:", ephemeral: true });
+
+    const filter = (m) => m.author.id === interaction.user.id;
+    const collected = await interaction.channel.awaitMessages({ filter, max: 1, time: 30000 });
+    const reason = collected.first()?.content || "No reason";
+
+    collected.first()?.delete().catch(() => {});
+    user.send(`❌ Your registration was **rejected**.\n**Reason:** ${reason}`);
+
+    interaction.followUp({ content: `❌ Rejected: ${reason}`, ephemeral: true });
   }
 });
 
+// =============================================================
 client.login(process.env.TOKEN);
