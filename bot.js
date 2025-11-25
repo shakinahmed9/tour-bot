@@ -2,14 +2,11 @@ require("dotenv").config();
 const {
   Client,
   GatewayIntentBits,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  Partials,
+  EmbedBuilder,
+  Partials
 } = require("discord.js");
 
 const client = new Client({
@@ -17,45 +14,46 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.DirectMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.DirectMessages
   ],
-  partials: [Partials.Channel]
+  partials: [Partials.Channel],
 });
 
-// ========================= ENV CONFIG =========================
-const REG_CHANNEL = process.env.REG_CHANNEL; 
-const APPROVE_CHANNEL = process.env.APPROVE_CHANNEL;
-const APPROVER_ROLE = process.env.APPROVER_ROLE;
-const REQUIRE_ROLE = process.env.REQUIRE_ROLE; // <<=== REQUIRED ROLE HERE
+// ========================= CONFIG =========================
+const REG_CHANNEL = process.env.REG_CHANNEL;        // Channel where users type to get Register button
+const APPROVE_CHANNEL = process.env.APPROVE_CHANNEL; 
+const APPROVER_ROLE = process.env.APPROVER_ROLE;    
+const REQUIRE_ROLE = process.env.REQUIRE_ROLE;      
 
-let tempData = {};
 let registered = new Set();
+let formStep = {};       // Tracks DM steps
+let formData = {};       // Stores answers
 
 // =============================================================
-// SEND REGISTRATION BUTTON WHEN USER WRITES IN REG CHANNEL
+// WHEN USER WRITES ANYTHING IN REG CHANNEL → SEND BUTTON
 // =============================================================
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
   if (msg.channel.id !== REG_CHANNEL) return;
 
-  // Required Role Check
+  // Require role check
   if (REQUIRE_ROLE && !msg.member.roles.cache.has(REQUIRE_ROLE)) {
-    return msg.reply("❌ You don't have the required role to register.");
+    return msg.reply("❌ You don't have the required role to register!");
   }
 
   if (registered.has(msg.author.id)) {
-    return msg.reply("❌ You already registered.");
+    return msg.reply("❌ You already registered!");
   }
 
   const embed = new EmbedBuilder()
     .setTitle("📝 Tournament Registration")
-    .setDescription("Click **Register Now** to start registration in DM.")
+    .setDescription("Click **Register Now** to start your registration in DM.")
     .setColor("Blue");
 
   const btn = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`start_${msg.author.id}`)
+      .setCustomId(`regstart_${msg.author.id}`)
       .setLabel("Register Now")
       .setStyle(ButtonStyle.Primary)
   );
@@ -64,170 +62,143 @@ client.on("messageCreate", async (msg) => {
 });
 
 // =============================================================
-// OPEN STEP 1 — TEAM + LEADER FORM IN DM
+// USER CLICKS REGISTER BUTTON → START DM FORM
 // =============================================================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
 
-  const [type, userid] = interaction.customId.split("_");
-  if (type !== "start") return;
+  const [id, userid] = interaction.customId.split("_");
+  if (id !== "regstart") return;
 
   if (interaction.user.id !== userid)
-    return interaction.reply({ content: "❌ This button is not for you.", ephemeral: true });
+    return interaction.reply({ content: "❌ This button is not for you!", ephemeral: true });
 
   try {
     await interaction.reply({ content: "📩 Check your DM!", ephemeral: true });
 
-    const modal = new ModalBuilder()
-      .setCustomId(`step1_${userid}`)
-      .setTitle("Team Registration — Step 1");
+    const user = interaction.user;
+    await user.send("📝 **Welcome to Tournament Registration!**\nLet's start your form.");
 
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId("teamName")
-          .setLabel("Team Name")
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId("leaderName")
-          .setLabel("Leader Name")
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId("leaderUID")
-          .setLabel("Leader UID")
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId("discordName")
-          .setLabel("Discord Username")
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-      )
-    );
+    // Start step 1
+    formStep[userid] = 1;
+    formData[userid] = {};
 
-    await interaction.user.send("📝 **Fill Step 1 Form**");
-    await interaction.user.showModal(modal);
-
-  } catch (err) {
-    return interaction.reply({
-      content: "❌ I cannot DM you. Turn on your DM.",
-      ephemeral: true
-    });
+    user.send("**Step 1:** Enter your **Team Name**:");
+  } catch {
+    interaction.reply({ content: "❌ I cannot DM you. Please enable your DMs!", ephemeral: true });
   }
 });
 
 // =============================================================
-// STEP 1 SUBMISSION → OPEN STEP 2
+// HANDLE DM FORM STEPS
 // =============================================================
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isModalSubmit()) return;
+client.on("messageCreate", async (msg) => {
+  if (msg.author.bot) return;
+  if (msg.channel.type !== 1) return; // Only DM
 
-  const [form, userid] = interaction.customId.split("_");
+  const userid = msg.author.id;
+  const step = formStep[userid];
+  if (!step) return;
 
-  if (form !== "step1") return;
-  if (interaction.user.id !== userid)
-    return interaction.reply({ content: "❌ Not your form.", ephemeral: true });
+  const text = msg.content;
 
-  tempData[userid] = {
-    teamName: interaction.fields.getTextInputValue("teamName"),
-    leaderName: interaction.fields.getTextInputValue("leaderName"),
-    leaderUID: interaction.fields.getTextInputValue("leaderUID"),
-    discordName: interaction.fields.getTextInputValue("discordName")
-  };
+  // ---------- STEP 1 ----------
+  if (step === 1) {
+    formData[userid].teamName = text;
+    formStep[userid] = 2;
+    return msg.channel.send("**Step 2:** Enter **Leader Name**:");
+  }
 
-  // Step 2 modal
-  const modal2 = new ModalBuilder()
-    .setCustomId(`step2_${userid}`)
-    .setTitle("Player Registration — Step 2");
+  // ---------- STEP 2 ----------
+  if (step === 2) {
+    formData[userid].leaderName = text;
+    formStep[userid] = 3;
+    return msg.channel.send("**Step 3:** Enter **Leader UID**:");
+  }
 
-  modal2.addComponents(
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId("p1").setLabel("Player 1 (Name + UID)").setStyle(1).setRequired(true)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId("p2").setLabel("Player 2 (Name + UID)").setStyle(1).setRequired(true)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId("p3").setLabel("Player 3 (Name + UID)").setStyle(1).setRequired(true)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId("p4").setLabel("Player 4 (Name + UID)").setStyle(1).setRequired(true)
-    )
-  );
+  // ---------- STEP 3 ----------
+  if (step === 3) {
+    formData[userid].leaderUID = text;
+    formStep[userid] = 4;
+    return msg.channel.send("**Step 4:** Enter your **Discord Username**:");
+  }
 
-  await interaction.reply({ content: "Step 1 complete! Opening next form…" });
-  await interaction.user.showModal(modal2);
-});
+  // ---------- STEP 4 ----------
+  if (step === 4) {
+    formData[userid].discordName = text;
+    formStep[userid] = 5;
+    return msg.channel.send("**Step 5:** Enter **Player 1 (Name + UID)**:");
+  }
 
-// =============================================================
-// STEP 2 → FINAL SUBMIT
-// =============================================================
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isModalSubmit()) return;
+  // ---------- PLAYER 1 ----------
+  if (step === 5) {
+    formData[userid].p1 = text;
+    formStep[userid] = 6;
+    return msg.channel.send("**Player 2 (Name + UID):**");
+  }
 
-  const [form, userid] = interaction.customId.split("_");
-  if (form !== "step2") return;
+  // ---------- PLAYER 2 ----------
+  if (step === 6) {
+    formData[userid].p2 = text;
+    formStep[userid] = 7;
+    return msg.channel.send("**Player 3 (Name + UID):**");
+  }
 
-  let data = tempData[userid];
-  if (!data) return interaction.reply("❌ Something went wrong.");
+  // ---------- PLAYER 3 ----------
+  if (step === 7) {
+    formData[userid].p3 = text;
+    formStep[userid] = 8;
+    return msg.channel.send("**Player 4 (Name + UID):**");
+  }
 
-  // Save step 2 data
-  data.p1 = interaction.fields.getTextInputValue("p1");
-  data.p2 = interaction.fields.getTextInputValue("p2");
-  data.p3 = interaction.fields.getTextInputValue("p3");
-  data.p4 = interaction.fields.getTextInputValue("p4");
+  // ---------- PLAYER 4 (FINAL) ----------
+  if (step === 8) {
+    formData[userid].p4 = text;
 
-  delete tempData[userid];
+    const approveCh = await client.channels.fetch(APPROVE_CHANNEL);
+    const data = formData[userid];
 
-  // Send to approve channel
-  const approveCh = await client.channels.fetch(APPROVE_CHANNEL);
+    const embed = new EmbedBuilder()
+      .setTitle("📝 New Registration Request")
+      .setColor("Blue")
+      .addFields(
+        { name: "User", value: `<@${userid}>` },
+        { name: "Team Name", value: data.teamName },
+        { name: "Leader", value: `${data.leaderName} — UID: ${data.leaderUID}` },
+        { name: "Discord Username", value: data.discordName },
+        { name: "Player 1", value: data.p1 },
+        { name: "Player 2", value: data.p2 },
+        { name: "Player 3", value: data.p3 },
+        { name: "Player 4", value: data.p4 }
+      );
 
-  const embed = new EmbedBuilder()
-    .setTitle("📝 New Registration Request")
-    .setColor("Blue")
-    .addFields(
-      { name: "User", value: `<@${userid}>` },
-      { name: "Team Name", value: data.teamName },
-      { name: "Leader", value: `${data.leaderName} — UID: ${data.leaderUID}` },
-      { name: "Discord Username", value: data.discordName },
-      { name: "Player 1", value: data.p1 },
-      { name: "Player 2", value: data.p2 },
-      { name: "Player 3", value: data.p3 },
-      { name: "Player 4", value: data.p4 }
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`approve_${userid}`).setLabel("Approve").setStyle(3),
+      new ButtonBuilder().setCustomId(`reject_${userid}`).setLabel("Reject").setStyle(4)
     );
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`approve_${userid}`).setLabel("Approve").setStyle(3),
-    new ButtonBuilder().setCustomId(`reject_${userid}`).setLabel("Reject").setStyle(4)
-  );
+    approveCh.send({ embeds: [embed], components: [row] });
 
-  approveCh.send({ embeds: [embed], components: [row] });
+    msg.channel.send("✅ **Your registration has been submitted!**");
 
-  interaction.reply("✅ Registration Submitted! Please wait for approval.");
-  registered.add(userid);
+    registered.add(userid);
+    delete formStep[userid];
+    delete formData[userid];
+  }
 });
 
 // =============================================================
-// APPROVE / REJECT
+// APPROVE / REJECT HANDLER
 // =============================================================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
   if (interaction.channel.id !== APPROVE_CHANNEL) return;
 
   if (!interaction.member.roles.cache.has(APPROVER_ROLE))
-    return interaction.reply({ content: "❌ You cannot approve.", ephemeral: true });
+    return interaction.reply({ content: "❌ You cannot approve this request.", ephemeral: true });
 
   const [action, userid] = interaction.customId.split("_");
   const user = await interaction.guild.members.fetch(userid).catch(() => null);
-
   if (!user) return interaction.reply("❌ User not found.");
 
   if (action === "approve") {
@@ -240,12 +211,12 @@ client.on("interactionCreate", async (interaction) => {
 
     const filter = (m) => m.author.id === interaction.user.id;
     const collected = await interaction.channel.awaitMessages({ filter, max: 1, time: 30000 });
-    const reason = collected.first()?.content || "No reason";
 
+    const reason = collected.first()?.content || "No reason given";
     collected.first()?.delete().catch(() => {});
-    user.send(`❌ Your registration was **rejected**.\n**Reason:** ${reason}`);
 
-    interaction.followUp({ content: `❌ Rejected: ${reason}`, ephemeral: true });
+    user.send(`❌ Your registration was **rejected**.\n**Reason:** ${reason}`);
+    interaction.followUp({ content: `❌ Rejected (${reason})`, ephemeral: true });
   }
 });
 
