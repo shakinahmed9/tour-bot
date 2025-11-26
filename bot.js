@@ -10,8 +10,18 @@ const {
   ButtonStyle,
   EmbedBuilder,
   StringSelectMenuBuilder,
-  ChannelType,
 } = require("discord.js");
+
+// ---------------- BOT CLIENT ----------------
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.DirectMessages,
+  ],
+  partials: [Partials.Channel],
+});
 
 // ---------------- ENV ----------------
 const TOKEN = process.env.TOKEN;
@@ -62,7 +72,7 @@ client.on("messageCreate", async (msg) => {
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`register_${msg.author.id}`)
-    .setPlaceholder("Select an application.")
+    .setPlaceholder("Select Application")
     .addOptions([{ label: "Free Fire Tournament", value: "ff" }]);
 
   const UI = new ActionRowBuilder().addComponents(menu);
@@ -70,7 +80,7 @@ client.on("messageCreate", async (msg) => {
   const embed = new EmbedBuilder()
     .setTitle("Tournament Registration")
     .setDescription(
-      `Are you sure you want to register?\n\nOnce started you will receive questions in DM.\nYou will have **3 hours** to finish.\nYou may cancel anytime.`
+      `Are you sure you want to register?\n\nOnce started, you will receive questions in DM.\nYou have **3 hours** to finish.\nYou can type **cancel** anytime.`
     )
     .setColor("Blue");
 
@@ -93,7 +103,7 @@ client.on("interactionCreate", async (i) => {
 });
 
 // -------------------------------------------------------
-// 📝 FORM SYSTEM
+// 📝 FORM SYSTEM (fixed for v14)
 // -------------------------------------------------------
 async function startForm(user) {
   if (data.pending[user.id]) return user.send("⚠ Already pending.");
@@ -136,7 +146,7 @@ async function submitToPanel(user, record) {
     .setTimestamp();
 
   FORM.forEach((i) => {
-    embed.addFields({ name: i.q, value: record[i.id] });
+    embed.addFields({ name: i.q, value: record[i.id] || "N/A" });
   });
 
   const row = new ActionRowBuilder().addComponents(
@@ -149,7 +159,7 @@ async function submitToPanel(user, record) {
   data.pending[user.id] = { record, messageId: msg.id };
   save();
 
-  user.send("✅ Submitted. Use `status` anytime.");
+  user.send("✅ Submitted! Use `status` anytime.");
 }
 
 // -------------------------------------------------------
