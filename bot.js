@@ -38,12 +38,10 @@ client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
   if (msg.channel.id !== REG_CHANNEL) return;
 
-  // Require role
   if (REQUIRE_ROLE && !msg.member.roles.cache.has(REQUIRE_ROLE)) {
     return msg.reply("❌ You don't have the required role to register!");
   }
 
-  // Already registered
   if (registered.has(msg.author.id)) {
     return msg.reply("❌ You already registered!");
   }
@@ -65,7 +63,7 @@ client.on("messageCreate", async (msg) => {
 
 
 // =============================================================
-// USER CLICKS REGISTER BUTTON → START DM FORM
+// USER CLICKS REGISTER BUTTON
 // =============================================================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
@@ -76,40 +74,29 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.user.id !== userid)
     return interaction.reply({ content: "❌ This button is not for you!", ephemeral: true });
 
-  // SAFE REPLY (no double reply)
-  let replied = false;
   try {
     await interaction.reply({ content: "📩 Check your DM!", ephemeral: true });
-    replied = true;
-  } catch {
-    replied = true; // Already replied error ignore
-  }
-
-  const user = interaction.user;
+  } catch {}
 
   try {
-    await user.send("📝 **Welcome to Tournament Registration!**\nLet's start your form.");
+    await interaction.user.send("📝 **Welcome to Tournament Registration!**\nLet's start.");
   } catch {
-    if (!replied) {
-      return interaction.reply({ content: "❌ I cannot DM you. Enable DMs!", ephemeral: true });
-    }
-    return; // Stop here (DM failed)
+    return interaction.followUp({ content: "❌ Please enable your DMs!", ephemeral: true });
   }
 
-  // Start form safely
   formStep[userid] = 1;
   formData[userid] = {};
 
-  user.send("**Step 1:** Enter your **Team Name**:");
+  interaction.user.send("**Step 1:** Enter your **Team Name**:");
 });
 
 
 // =============================================================
-// HANDLE DM FORM STEPS
+// DM FORM HANDLING
 // =============================================================
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
-  if (msg.channel.type !== 1) return; // Only DM
+  if (msg.channel.type !== 1) return;
 
   const userid = msg.author.id;
   const step = formStep[userid];
@@ -136,7 +123,7 @@ client.on("messageCreate", async (msg) => {
     case 4:
       formData[userid].discordName = text;
       formStep[userid] = 5;
-      return msg.channel.send("**Step 5:** Enter **Player 1 (Name + UID)**:");
+      return msg.channel.send("**Player 1 (Name + UID):**");
 
     case 5:
       formData[userid].p1 = text;
@@ -166,7 +153,7 @@ client.on("messageCreate", async (msg) => {
           { name: "User", value: `<@${userid}>` },
           { name: "Team Name", value: data.teamName },
           { name: "Leader", value: `${data.leaderName} — UID: ${data.leaderUID}` },
-          { name: "Discord Username", value: data.discordName },
+          { name: "Discord", value: data.discordName },
           { name: "Player 1", value: data.p1 },
           { name: "Player 2", value: data.p2 },
           { name: "Player 3", value: data.p3 },
@@ -174,13 +161,13 @@ client.on("messageCreate", async (msg) => {
         );
 
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`approve-${userid}`).setLabel("Approve").setStyle(3),
-        new ButtonBuilder().setCustomId(`reject-${userid}`).setLabel("Reject").setStyle(4)
+        new ButtonBuilder().setCustomId(`approve-${userid}`).setLabel("Approve").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`reject-${userid}`).setLabel("Reject").setStyle(ButtonStyle.Danger)
       );
 
       approveCh.send({ embeds: [embed], components: [row] });
 
-      msg.channel.send("✅ **Your registration has been submitted!**");
+      msg.channel.send("✅ **Registration Submitted!**");
 
       registered.add(userid);
       delete formStep[userid];
@@ -191,14 +178,14 @@ client.on("messageCreate", async (msg) => {
 
 
 // =============================================================
-// APPROVE / REJECT
+// APPROVE & REJECT
 // =============================================================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
   if (interaction.channel.id !== APPROVE_CHANNEL) return;
 
   if (!interaction.member.roles.cache.has(APPROVER_ROLE))
-    return interaction.reply({ content: "❌ You cannot approve this request.", ephemeral: true });
+    return interaction.reply({ content: "❌ You are not allowed to approve.", ephemeral: true });
 
   const [action, userid] = interaction.customId.split("-");
   const user = await interaction.guild.members.fetch(userid).catch(() => null);
@@ -207,22 +194,22 @@ client.on("interactionCreate", async (interaction) => {
 
   if (action === "approve") {
     interaction.reply(`✅ Approved by <@${interaction.user.id}>`);
-    user.send("🎉 Your registration has been **approved!**");
+    user.send("🎉 Your registration is **approved!**");
   }
 
   if (action === "reject") {
-    interaction.reply({ content: "❌ Type reject reason:", ephemeral: true });
+    interaction.reply({ content: "Send reject reason:", ephemeral: true });
 
     const filter = (m) => m.author.id === interaction.user.id;
     const collected = await interaction.channel.awaitMessages({ filter, max: 1, time: 30000 });
 
     const reason = collected.first()?.content || "No reason given";
+
     collected.first()?.delete().catch(() => {});
 
-    user.send(`❌ Your registration was **rejected**.\n**Reason:** ${reason}`);
+    user.send(`❌ Your registration was rejected.\n**Reason:** ${reason}`);
     interaction.followUp({ content: `❌ Rejected (${reason})`, ephemeral: true });
   }
 });
 
 client.login(process.env.TOKEN);
-
